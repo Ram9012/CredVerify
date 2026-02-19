@@ -8,14 +8,9 @@ export function useWallet() {
     const [isConnecting, setIsConnecting] = useState(false);
 
     useEffect(() => {
-        // Reconnect existing session on mount
-        peraWallet
-            .reconnectSession()
-            .then((addr) => {
-                if (addr && addr.length) setAccounts(addr);
-                peraWallet.connector?.on('disconnect', handleDisconnect);
-            })
-            .catch(() => { });
+        // Auto-reconnect intentionally removed.
+        // Wallet connects only when user clicks "Connect Wallet".
+        // This prevents MetaMask / Pera Wallet from hijacking page load on mobile.
     }, []);
 
     function handleDisconnect() {

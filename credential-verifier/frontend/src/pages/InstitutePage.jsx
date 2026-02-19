@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useWalletContext } from '../context/WalletContext';
 import { issueCredential, transferToStudent, revokeCredential } from '../lib/contract';
 import { getExplorerUrl, APP_ID } from '../lib/algorand';
+import CertificateQR from '../components/CertificateQR';
 import toast from 'react-hot-toast';
 
 const TABS = ['Issue Credential', 'Transfer to Student', 'Revoke Credential'];
 
 export default function InstitutePage() {
     const [activeTab, setActiveTab] = useState(0);
-    const { isConnected, activeAccount, signer } = useWalletContext();
+    const { isConnected, activeAccount, signer, connect, isConnecting } = useWalletContext();
 
     return (
         <div className="fade-in">
@@ -24,9 +25,32 @@ export default function InstitutePage() {
             </div>
 
             {!isConnected && (
-                <div className="wallet-required">
-                    <span>🔐</span>
-                    <p>Connect your admin wallet to access institute functions.</p>
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 16,
+                    background: 'rgba(139,92,246,0.08)',
+                    border: '1px solid rgba(139,92,246,0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '16px 20px',
+                    marginBottom: 24,
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span>🔐</span>
+                        <p style={{ color: 'var(--accent-purple)', fontWeight: 500, margin: 0 }}>
+                            Connect your Pera Wallet to access admin functions.
+                        </p>
+                    </div>
+                    <button
+                        className="btn btn-primary"
+                        onClick={connect}
+                        disabled={isConnecting}
+                        id="btn-institute-connect-wallet"
+                    >
+                        {isConnecting ? <><span className="spinner" /> Connecting&hellip;</> : '🔗 Connect Pera Wallet'}
+                    </button>
                 </div>
             )}
 
@@ -43,15 +67,15 @@ export default function InstitutePage() {
                 ))}
             </div>
 
-            {activeTab === 0 && <IssueForm isConnected={isConnected} sender={activeAccount} signer={signer} />}
-            {activeTab === 1 && <TransferForm isConnected={isConnected} sender={activeAccount} signer={signer} />}
-            {activeTab === 2 && <RevokeForm isConnected={isConnected} sender={activeAccount} signer={signer} />}
+            {activeTab === 0 && <IssueForm isConnected={isConnected} sender={activeAccount} signer={signer} connect={connect} isConnecting={isConnecting} />}
+            {activeTab === 1 && <TransferForm isConnected={isConnected} sender={activeAccount} signer={signer} connect={connect} isConnecting={isConnecting} />}
+            {activeTab === 2 && <RevokeForm isConnected={isConnected} sender={activeAccount} signer={signer} connect={connect} isConnecting={isConnecting} />}
         </div>
     );
 }
 
 /* ─── Issue Credential Form ─── */
-function IssueForm({ isConnected, sender, signer }) {
+function IssueForm({ isConnected, sender, signer, connect, isConnecting }) {
     const [form, setForm] = useState({ studentAddress: '', assetName: '', unitName: '', ipfsUrl: '' });
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
@@ -62,7 +86,11 @@ function IssueForm({ isConnected, sender, signer }) {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        if (!isConnected) return toast.error('Connect wallet first.');
+        if (!isConnected) {
+            toast('Connecting wallet first…', { icon: '🔗' });
+            const accs = await connect();
+            if (!accs || accs.length === 0) return; // user cancelled
+        }
         if (!form.studentAddress || !form.assetName || !form.unitName) {
             return toast.error('Please fill all required fields.');
         }
@@ -96,7 +124,7 @@ function IssueForm({ isConnected, sender, signer }) {
                         placeholder="ABCDEF1234…"
                         value={form.studentAddress}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                 </div>
                 <div className="form-group">
@@ -108,7 +136,7 @@ function IssueForm({ isConnected, sender, signer }) {
                         placeholder="Bachelor of Computer Science"
                         value={form.assetName}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                 </div>
                 <div className="form-group">
@@ -121,7 +149,7 @@ function IssueForm({ isConnected, sender, signer }) {
                         maxLength={8}
                         value={form.unitName}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                     <span className="form-hint">Short identifier (max 8 chars)</span>
                 </div>
@@ -134,40 +162,50 @@ function IssueForm({ isConnected, sender, signer }) {
                         placeholder="ipfs://Qm…"
                         value={form.ipfsUrl}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                     <span className="form-hint">Link to off-chain certificate document</span>
                 </div>
                 <button
                     type="submit"
                     className="btn btn-primary btn-full"
-                    disabled={!isConnected || loading}
+                    disabled={loading || isConnecting}
                     id="btn-issue-credential"
                 >
-                    {loading ? <><span className="spinner" /> Issuing…</> : '🎫 Issue Credential'}
+                    {isConnecting ? <><span className="spinner" /> Connecting&hellip;</>
+                        : loading ? <><span className="spinner" /> Issuing&hellip;</>
+                            : !isConnected ? '🔗 Connect Wallet & Issue'
+                                : '🎫 Issue Credential'}
                 </button>
             </form>
 
             {result && (
-                <div className="result-box" style={{ marginTop: 24 }}>
-                    <h4>✅ Credential Issued!</h4>
-                    <div className="info-grid" style={{ marginTop: 12 }}>
-                        <div className="info-row">
-                            <span className="info-label">Asset ID</span>
-                            <span className="info-value">{result.assetId}</span>
+                <div style={{ marginTop: 24 }}>
+                    <div className="result-box">
+                        <h4>✅ Credential Issued!</h4>
+                        <div className="info-grid" style={{ marginTop: 12 }}>
+                            <div className="info-row">
+                                <span className="info-label">Asset ID</span>
+                                <span className="info-value">{result.assetId}</span>
+                            </div>
+                            <div className="info-row">
+                                <span className="info-label">Transaction</span>
+                                <a
+                                    className="info-value"
+                                    href={getExplorerUrl('tx', result.txId)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
+                                >
+                                    {result.txId?.slice(0, 16)}&hellip; ↗
+                                </a>
+                            </div>
                         </div>
-                        <div className="info-row">
-                            <span className="info-label">Transaction</span>
-                            <a
-                                className="info-value"
-                                href={getExplorerUrl('tx', result.txId)}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
-                            >
-                                {result.txId?.slice(0, 16)}… ↗
-                            </a>
-                        </div>
+                    </div>
+
+                    {/* QR code so admin can instantly share verify link with student */}
+                    <div style={{ marginTop: 20 }}>
+                        <CertificateQR nftId={result.assetId} />
                     </div>
                 </div>
             )}
@@ -176,7 +214,7 @@ function IssueForm({ isConnected, sender, signer }) {
 }
 
 /* ─── Transfer Form ─── */
-function TransferForm({ isConnected, sender, signer }) {
+function TransferForm({ isConnected, sender, signer, connect, isConnecting }) {
     const [form, setForm] = useState({ assetId: '', studentAddress: '' });
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
@@ -187,7 +225,11 @@ function TransferForm({ isConnected, sender, signer }) {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        if (!isConnected) return toast.error('Connect wallet first.');
+        if (!isConnected) {
+            toast('Connecting wallet first…', { icon: '🔗' });
+            const accs = await connect();
+            if (!accs || accs.length === 0) return;
+        }
         if (!form.assetId || !form.studentAddress) return toast.error('Please fill all fields.');
         setLoading(true);
         setResult(null);
@@ -227,7 +269,7 @@ function TransferForm({ isConnected, sender, signer }) {
                         placeholder="1234567890"
                         value={form.assetId}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                 </div>
                 <div className="form-group">
@@ -239,16 +281,19 @@ function TransferForm({ isConnected, sender, signer }) {
                         placeholder="ABCDEF1234…"
                         value={form.studentAddress}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                 </div>
                 <button
                     type="submit"
                     className="btn btn-primary btn-full"
-                    disabled={!isConnected || loading}
+                    disabled={loading || isConnecting}
                     id="btn-transfer-credential"
                 >
-                    {loading ? <><span className="spinner" /> Transferring…</> : '📤 Transfer to Student'}
+                    {isConnecting ? <><span className="spinner" /> Connecting&hellip;</>
+                        : loading ? <><span className="spinner" /> Transferring&hellip;</>
+                            : !isConnected ? '🔗 Connect Wallet & Transfer'
+                                : '📤 Transfer to Student'}
                 </button>
             </form>
 
@@ -268,7 +313,7 @@ function TransferForm({ isConnected, sender, signer }) {
 }
 
 /* ─── Revoke Form ─── */
-function RevokeForm({ isConnected, sender, signer }) {
+function RevokeForm({ isConnected, sender, signer, connect, isConnecting }) {
     const [form, setForm] = useState({ assetId: '', studentAddress: '' });
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
@@ -280,7 +325,11 @@ function RevokeForm({ isConnected, sender, signer }) {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        if (!isConnected) return toast.error('Connect wallet first.');
+        if (!isConnected) {
+            toast('Connecting wallet first…', { icon: '🔗' });
+            const accs = await connect();
+            if (!accs || accs.length === 0) return;
+        }
         if (!confirmed) return toast.error('Please confirm revocation by checking the box.');
         if (!form.assetId || !form.studentAddress) return toast.error('Please fill all fields.');
         setLoading(true);
@@ -315,7 +364,7 @@ function RevokeForm({ isConnected, sender, signer }) {
                         placeholder="1234567890"
                         value={form.assetId}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                 </div>
                 <div className="form-group">
@@ -327,7 +376,7 @@ function RevokeForm({ isConnected, sender, signer }) {
                         placeholder="ABCDEF1234…"
                         value={form.studentAddress}
                         onChange={handleChange}
-                        disabled={!isConnected || loading}
+                        disabled={loading}
                     />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
