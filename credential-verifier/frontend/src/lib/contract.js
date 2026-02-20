@@ -152,6 +152,7 @@ export async function getIssuerInfo() {
 }
 
 export async function optInToAsset(sender, signer, assetId) {
+    if (!sender) throw new Error("Sender address is required for opt-in.");
     console.log(`DEBUG: optInToAsset sender=${sender} assetId=${assetId}`);
     const sp = await algodClient.getTransactionParams().do();
     const senderStr = str(sender);

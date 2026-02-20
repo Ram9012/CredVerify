@@ -73,7 +73,7 @@ export default function StudentPage() {
 
     async function handleOptIn(e) {
         e.preventDefault();
-        if (!isConnected) return toast.error('Connect wallet first.');
+        if (!isConnected || !activeAccount) return toast.error('Connect wallet first.');
         if (!optInAssetId) return toast.error('Enter an Asset ID to opt in.');
         setOptInLoading(true);
         try {
