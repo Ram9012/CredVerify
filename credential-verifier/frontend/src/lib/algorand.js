@@ -8,7 +8,14 @@ export const APP_ID = parseInt(import.meta.env.VITE_APP_ID || 0);
 function parseServerUrl(fullUrl) {
     try {
         const u = new URL(fullUrl);
-        return { server: `${u.protocol}//${u.hostname}`, port: u.port || '' };
+        // If port is empty, infer from protocol or return undefined (which SDK defaults to 80/443 usually)
+        // But explicit is better.
+        let port = u.port;
+        if (!port) {
+            if (u.protocol === 'https:') port = 443;
+            if (u.protocol === 'http:') port = 80;
+        }
+        return { server: `${u.protocol}//${u.hostname}`, port };
     } catch {
         return { server: fullUrl, port: '' };
     }
@@ -17,8 +24,8 @@ function parseServerUrl(fullUrl) {
 const ALGOD_FULL = import.meta.env.VITE_ALGOD_SERVER || 'http://127.0.0.1:4001';
 const INDEXER_FULL = import.meta.env.VITE_INDEXER_SERVER || 'http://127.0.0.1:8980';
 // LocalNet uses this fixed dummy token; a real node may use '' or a real token
-const ALGOD_TOKEN = import.meta.env.VITE_ALGOD_TOKEN || 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const INDEXER_TOKEN = import.meta.env.VITE_INDEXER_TOKEN || '';
+const ALGOD_TOKEN = import.meta.env.VITE_ALGOD_TOKEN ?? 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const INDEXER_TOKEN = import.meta.env.VITE_INDEXER_TOKEN ?? '';
 
 const algod = parseServerUrl(ALGOD_FULL);
 const indexer = parseServerUrl(INDEXER_FULL);
@@ -27,6 +34,16 @@ export const algodClient = new algosdk.Algodv2(ALGOD_TOKEN, algod.server, algod.
 export const indexerClient = new algosdk.Indexer(INDEXER_TOKEN, indexer.server, indexer.port);
 
 export function getExplorerUrl(type, id) {
+    // Check if we are on Testnet based on the algod server URL or explicit env var
+    const isTestnet = ALGOD_FULL.includes('testnet') || import.meta.env.VITE_ALGOD_SERVER?.includes('testnet');
+
+    if (isTestnet) {
+        if (type === 'tx') return `https://testnet.explorer.perawallet.app/tx/${id}`;
+        if (type === 'asset') return `https://testnet.explorer.perawallet.app/asset/${id}`;
+        if (type === 'app') return `https://testnet.explorer.perawallet.app/application/${id}`;
+    }
+
+    // Default to LocalNet Lora
     if (type === 'tx') return `https://lora.algokit.io/localnet/transaction/${id}`;
     if (type === 'asset') return `https://lora.algokit.io/localnet/asset/${id}`;
     if (type === 'app') return `https://lora.algokit.io/localnet/application/${id}`;

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deploy Credential Verifier</title>
+    <script src="https://unpkg.com/algosdk@2.7.0/dist/browser/algosdk.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+        input, button, textarea { width: 100%; padding: 0.5rem; margin-bottom: 1rem; font-size: 1rem; }
+        button { background: #000; color: #fff; border: none; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        .log { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; font-family: monospace; }
+        .error { color: red; }
+        .success { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Deploy Credential Verifier</h1>
+    <p>Deploy directly from your browser to bypass network blocks.</p>
+
+    <label><strong>Mnemonic (25 words)</strong></label>
+    <input type="password" id="mnemonic" placeholder="apple banana cherry..." />
+
+    <button onclick="deploy()">Deploy to TestNet</button>
+
+    <div id="status" class="log">Ready.</div>
+
+    <script>
+        // Compiled bytecode (from your project)
+        const ARC56 = {
+            byteCode: {
+                approval: "CyAEAAEgAiYDBWFkbWluBHJldl8EFR98dTEYQAAEKDEAZzEbQQArMRkURDEYRIIEBA1p1tYEOfRGrwQe3qawBEb4rXU2GgCOBAAJAIAAswC9ADEZFDEYFBBDNhoBSRUkEkQ2GgJJIlklCEsBFRJENhoDSSJZJQhLARUSRDYaBEkiWSUISwEVEkSIANSxTFcCAE8CVwIATwJXAgAyCkcCTwayKrIssiuyKbInsiayJSKyJCKyIyOyIoEDshAisgGztDwWKUsBUIABAL8qTFCwI0M2GgFJFYEIEkQXNhoCSRUkEkSIAHpLARYpTFC+RCJTFESxI7ISshSyEYEEshAisgGzI0MiKGVEKkxQsCNDNhoBSRWBCBJEFzYaAkkVJBJEiAA9SwEWKUxQSb5EIlMURLEjsi9LAbIuSwKyLYEFshAisgGzsTIKI7ISshRMshNMshGBBLIQIrIBs4ABgL8jQzEAIihlRBJEiQ==",
+                clear: "C4EBQw=="
+            }
+        };
+
+        const ALGOD_SERVER = 'https://testnet-api.algonode.cloud';
+        const ALGOD_PORT = 443;
+        const ALGOD_TOKEN = {}; // Browser doesn't send prohibited headers by default
+
+        function log(msg, type = '') {
+            const el = document.getElementById('status');
+            el.innerHTML += `<div class="${type}">${msg}</div>`;
+        }
+
+        async function deploy() {
+            const mn = document.getElementById('mnemonic').value.trim();
+            if (!mn) return alert('Please enter your mnemonic');
+
+            document.getElementById('status').innerHTML = 'Connecting...<br>';
+            
+            try {
+                const algod = new algosdk.Algodv2(ALGOD_TOKEN, ALGOD_SERVER, ALGOD_PORT);
+                const status = await algod.status().do();
+                log(`Connected! Last round: ${status['last-round']}`, 'success');
+
+                const account = algosdk.mnemonicToSecretKey(mn);
+                log(`Deployer: ${account.addr}`);
+
+                const info = await algod.accountInformation(account.addr).do();
+                log(`Balance: ${info.amount / 1e6} ALGO`);
+
+                // Create Transaction
+                const params = await algod.getTransactionParams().do();
+                const approval = new Uint8Array(atob(ARC56.byteCode.approval).split('').map(c => c.charCodeAt(0)));
+                const clear = new Uint8Array(atob(ARC56.byteCode.clear).split('').map(c => c.charCodeAt(0)));
+
+                const txn = algosdk.makeApplicationCreateTxnFromObject({
+                    sender: account.addr,
+                    suggestedParams: params,
+                    onComplete: algosdk.OnApplicationComplete.NoOpOC,
+                    approvalProgram: approval,
+                    clearProgram: clear,
+                    numGlobalInts: 0,
+                    numGlobalByteSlices: 1,
+                    numLocalInts: 0,
+                    numLocalByteSlices: 0,
+                    extraPages: 0
+                });
+
+                const signedTxn = txn.signTxn(account.sk);
+                log('Sending deployment transaction...');
+                
+                const { txId } = await algod.sendRawTransaction(signedTxn).do();
+                log(`Tx ID: ${txId}`);
+                log('Waiting for confirmation...');
+
+                const result = await algosdk.waitForConfirmation(algod, txId, 4);
+                const appId = result['application-index'];
+
+                log(`✅ DEPLOYED! App ID: ${appId}`, 'success');
+                log(`<br><strong>👉 Copy this App ID to your .env: VITE_APP_ID=${appId}</strong>`);
+
+            } catch (e) {
+                console.error(e);
+                log(`❌ Error: ${e.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

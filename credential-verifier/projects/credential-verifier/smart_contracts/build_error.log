@@ -1,0 +1,7 @@
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\raman\AppData\Local\Programs\Python\Python312\Lib\site-packages\algopy.py", line 4, in <module>
+    raise RuntimeError(
+RuntimeError: `import algopy` cannot be executed by the python interpreter. It is intended to be used by the puyapy compiler to compile Algorand smart contracts written in Algorand Python.For more details see https://algorandfoundation.github.io/puya/index.html#compiler-usage

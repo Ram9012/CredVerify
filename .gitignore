@@ -1,0 +1,9 @@
+# Deployment secrets - NEVER commit
+.env.deploy
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build outputs
+dist/

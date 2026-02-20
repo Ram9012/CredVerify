@@ -1,0 +1,137 @@
+5
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fund Smart Contract</title>
+    <script src="https://unpkg.com/algosdk@2.7.0/dist/browser/algosdk.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            line-height: 1.5;
+        }
+
+        input,
+        button,
+        textarea {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+
+        button {
+            background: #000;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .log {
+            background: #f4f4f4;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Fund Smart Contract</h1>
+    <p>Your Smart Contract needs a minimum balance to operate (create assets). Use this tool to send 2 ALGO to it.</p>
+
+    <div style="background: #eef; padding: 10px; margin-bottom: 20px; border-radius: 4px;">
+        <strong>Contract Address:</strong><br>
+        <code id="addr">CABJUWEOBURRPKKVW3XKRBPKSJH6WKQVVG2R5QPCUCQE6ZVH2HNA2TOU5U</code>
+    </div>
+
+    <label><strong>Your Mnemonic (25 words)</strong></label>
+    <input type="password" id="mnemonic" placeholder="apple banana cherry..." />
+
+    <button onclick="fund()">Send 2 ALGO</button>
+
+    <div id="status" class="log">Ready.</div>
+
+    <script>
+        const APP_ADDR = 'CABJUWEOBURRPKKVW3XKRBPKSJH6WKQVVG2R5QPCUCQE6ZVH2HNA2TOU5U';
+        const ALGOD_SERVER = 'https://testnet-api.algonode.cloud';
+        const ALGOD_PORT = 443;
+        const ALGOD_TOKEN = {};
+
+        function log(msg, type = '') {
+            const el = document.getElementById('status');
+            el.innerHTML += `<div class="${type}">${msg}</div>`;
+        }
+
+        async function fund() {
+            const mn = document.getElementById('mnemonic').value.trim();
+            if (!mn) return alert('Please enter your mnemonic');
+
+            document.getElementById('status').innerHTML = 'Connecting...<br>';
+
+            try {
+                const algod = new algosdk.Algodv2(ALGOD_TOKEN, ALGOD_SERVER, ALGOD_PORT);
+                const status = await algod.status().do();
+                log(`Connected! Last round: ${status['last-round']}`, 'success');
+
+                const account = algosdk.mnemonicToSecretKey(mn);
+                log(`Sender: ${account.addr}`);
+
+                const info = await algod.accountInformation(account.addr).do();
+                log(`Balance: ${info.amount / 1e6} ALGO`);
+
+                if (info.amount < 2100000) {
+                    log('❌ Insufficient balance to fund contract.', 'error');
+                    return;
+                }
+
+                // Create Payment Transaction
+                const params = await algod.getTransactionParams().do();
+                const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+                    from: account.addr,
+                    to: APP_ADDR,
+                    amount: 2000000, // 2 ALGO
+                    suggestedParams: params
+                });
+
+                const signedTxn = txn.signTxn(account.sk);
+                log('Sending 2 ALGO to contract...');
+
+                const { txId } = await algod.sendRawTransaction(signedTxn).do();
+                log(`Tx ID: ${txId}`);
+                log('Waiting for confirmation...');
+
+                await algosdk.waitForConfirmation(algod, txId, 4);
+
+                log(`✅ FUNDED! Contract is ready.`, 'success');
+                log(`<br><strong>👉 You can now use "Issue Credential" in the frontend.</strong>`);
+
+            } catch (e) {
+                console.error(e);
+                log(`❌ Error: ${e.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+
+</html>
